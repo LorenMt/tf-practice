@@ -154,7 +154,7 @@ for epoch in range(total_epoch):
     # iterate for all batches
     for i in range(total_batch):
         x_train, _ = mnist.train.next_batch(batch_size)
-        # calculate kl and vae loss
+        # calculate and average kl and vae loss for each batch
         cost[0] = np.mean(VAE.sess.run(VAE.kl_loss, feed_dict={VAE.x: x_train}))
         cost[1] = np.mean(VAE.sess.run(VAE.rec_loss, feed_dict={VAE.x: x_train}))
         cost[2] = VAE.model_fit(x_train)
@@ -192,7 +192,7 @@ for i in range(20):
 plt.colorbar()
 
 
-# sampling latent space
+# sampling latent space with 15 * 15 examples
 nx = ny = 15
 x_values = np.linspace(-2, 2, nx)
 y_values = np.linspace(-2, 2, ny)
