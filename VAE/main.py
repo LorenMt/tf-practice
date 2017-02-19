@@ -112,7 +112,7 @@ class VAE(object):
         # reconstruct training data from sampled latent states
         self.x_rec = self._gen_model(self.z, network_weights['W'], network_weights['b'])
 
-    # define vae loss and optimizer
+    # define VAE loss and optimizer
     def _model_loss_optimizer(self):
         # define reconstruction loss (binary cross-entropy)
         self.rec_loss = -tf.reduce_sum(self.x * tf.log(1e-10 + self.x_rec)
