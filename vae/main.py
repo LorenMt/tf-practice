@@ -54,8 +54,7 @@ class VAE(object):
                                           initializer=layers.xavier_initializer()),
             'lat_logstd': tf.get_variable(name='lat_logstd',
                                           shape=[n_hidden_2, self.latent_dim],
-                                          initializer=layers.xavier_initializer()),
-        }
+                                          initializer=layers.xavier_initializer())}
         weights_all['b'] = {
             'encoder_1' : tf.Variable(name='encoder_1',
                                       initial_value=tf.zeros(n_hidden_1)),
@@ -68,8 +67,7 @@ class VAE(object):
             'lat_mean'  : tf.Variable(name='lat_mean',
                                       initial_value=tf.zeros(self.latent_dim)),
             'lat_logstd': tf.Variable(name='lat_logstd',
-                                      initial_value=tf.zeros(self.latent_dim)),
-        }
+                                      initial_value=tf.zeros(self.latent_dim))}
         return weights_all
 
 
@@ -129,19 +127,6 @@ class VAE(object):
         opt, cost = self.sess.run([self.optimizer, self.loss], feed_dict={self.x: x})
         return cost
 
-    # return reconstructed training data
-    def model_rec(self, x):
-        return self.sess.run(self.x_rec, feed_dict={self.x: x})
-
-    # return latence space
-    def model_lat(self, x):
-        return self.sess.run(self.z, feed_dict={self.x: x})
-
-    # sample latent space
-    def model_gen(self, z):
-        return self.sess.run(self.x_rec, feed_dict={self.z: z})
-
-
 
 # load MNIST dataset
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
@@ -151,7 +136,7 @@ latent_dim  = 2
 batch_size  = 1000
 input_shape = 784
 print_step  = 1
-total_epoch = 150
+total_epoch = 200
 network_architecture = dict(n_hidden_1 = 600,
                             n_hidden_2 = 600)
 
@@ -162,58 +147,64 @@ VAE = VAE(input_shape=784,
           network_architecture=network_architecture)
 
 # training VAE model
-total_batch = int(mnist.train.num_examples / batch_size)
 for epoch in range(total_epoch):
-    avg_cost = 0.
-    # Loop over all batches
+    cost     = np.zeros(3, dtype=np.float32)
+    avg_cost = np.zeros(3, dtype=np.float32)
+    total_batch = int(mnist.train.num_examples / batch_size)
+    # iterate for all batches
     for i in range(total_batch):
         x_train, _ = mnist.train.next_batch(batch_size)
-        cost = VAE.model_fit(x_train)
+        # calculate kl and vae loss
+        cost[0] = np.mean(VAE.sess.run(VAE.kl_loss, feed_dict={VAE.x: x_train}))
+        cost[1] = np.mean(VAE.sess.run(VAE.rec_loss, feed_dict={VAE.x: x_train}))
+        cost[2] = VAE.model_fit(x_train)
         avg_cost += cost / mnist.train.num_examples
 
     if epoch % print_step == 0:
-        print("Epoch: {:04d} | total-loss: {:.4f}".format((epoch+1), avg_cost))
+        print("Epoch: {:04d} | kl-loss: {:.4f} + rec-loss: {:.4f} = total-loss: {:.4f}"
+              .format((epoch+1), avg_cost[0], avg_cost[1], avg_cost[2]))
 
 
 # reconstruction results visualization
-x_sample = mnist.test.next_batch(batch_size)[0]
-x_reconstruct = VAE.model_rec(x_sample)
+x_test= mnist.test.next_batch(batch_size)[0]
+x_rec = VAE.sess.run(VAE.x_rec, feed_dict={VAE.x:x_test})
 
-plt.figure(figsize=(8, 12))
+plt.figure(figsize=(10, 4))
 for i in range(5):
-    plt.subplot(5, 2, 2*i + 1)
-    plt.imshow(x_sample[i].reshape(28, 28), vmin=0, vmax=1, cmap="gray")
+    plt.subplot(2, 5, i + 1)
+    plt.imshow(x_test[i].reshape(28, 28), cmap="gray")
     plt.axis('off')
-    plt.subplot(5, 2, 2*i + 2)
-    plt.imshow(x_reconstruct[i].reshape(28, 28), vmin=0, vmax=1, cmap="gray")
+    plt.subplot(2, 5, i +6)
+    plt.imshow(x_rec[i].reshape(28, 28), cmap="gray")
     plt.axis('off')
 plt.tight_layout()
 
 
-# latnet space visualization for latent_dim=2
+# latent space visualization for latent_dim=2
 plt.figure(figsize=(8, 6))
 for i in range(20):
-    x_sample, y_sample = mnist.test.next_batch(batch_size)
-    z_mu = VAE.model_lat(x_sample)
-    plt.scatter(z_mu[:, 0], z_mu[:, 1],
-                c=np.argmax(y_sample, 1),
+    x_test, y_test= mnist.test.next_batch(batch_size)
+    z = VAE.sess.run(VAE.z, feed_dict={VAE.x:x_test})
+    plt.scatter(z[:, 0], z[:, 1],
+                c=np.argmax(y_test, 1),
                 cmap='Spectral',
                 edgecolors='black')
 plt.colorbar()
 
+
 # sampling latent space
-nx = ny = 20
+nx = ny = 15
 x_values = np.linspace(-2, 2, nx)
 y_values = np.linspace(-2, 2, ny)
 
 canvas = np.empty((28*ny, 28*nx))
 for i, yi in enumerate(x_values):
     for j, xi in enumerate(y_values):
-        z_mu = np.array([[xi, yi]]*batch_size)
-        x_mean = VAE.model_gen(z_mu)
-        canvas[(nx-i-1)*28:(nx-i)*28, j*28:(j+1)*28] = x_mean[0].reshape(28, 28)
+        z = np.array([[xi, yi]]*batch_size)
+        x_rec = VAE.sess.run(VAE.x_rec, feed_dict={VAE.z:z})
+        canvas[(nx-i-1)*28:(nx-i)*28, j*28:(j+1)*28] = x_rec[0].reshape(28, 28)
 
-plt.figure(figsize=(8, 10))
+plt.figure(figsize=(6, 6))
 Xi, Yi = np.meshgrid(x_values, y_values)
 plt.imshow(canvas, origin="upper", cmap="gray")
 plt.axis('off')
