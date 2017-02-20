@@ -71,9 +71,9 @@ class VAE(object):
         return weights_all
 
 
-    # define inference model
-    def _inf_model(self, x, weights, biases):
-        fclayer_1 = tf.nn.relu(tf.add(tf.matmul(x, weights['encoder_1']),
+    # define inference model (q(z|x))
+    def _inf_model(self, weights, biases):
+        fclayer_1 = tf.nn.relu(tf.add(tf.matmul(self.x, weights['encoder_1']),
                                       biases['encoder_1']))
         fclayer_2 = tf.nn.relu(tf.add(tf.matmul(fclayer_1, weights['encoder_2']),
                                       biases['encoder_2']))
@@ -83,15 +83,14 @@ class VAE(object):
                            biases['lat_logstd'])
         return z_mean, z_logstd
 
-    # define generative model
-    def _gen_model(self, x, weights, biases):
-        fclayer_1 = tf.nn.relu(tf.add(tf.matmul(x, weights['decoder_1']),
+    # define generative model (p(x|z))
+    def _gen_model(self, weights, biases):
+        fclayer_1 = tf.nn.relu(tf.add(tf.matmul(self.z, weights['decoder_1']),
                                       biases['decoder_1']))
         fclayer_2 = tf.nn.sigmoid(tf.add(tf.matmul(fclayer_1, weights['decoder_2']),
                                          biases['decoder_2']))
         return fclayer_2
 
-    # use learned parameters to sample latent space (z ~ N(0, I))
     def _sampling(self, z_mean, z_logstd):
         epsilon = tf.random_normal((self.batch_size, self.latent_dim))
         return z_mean + tf.exp(z_logstd) * epsilon
@@ -102,13 +101,13 @@ class VAE(object):
         network_weights = self._weights_init(**self.network_architecture)
 
         # learn gaussian parameters from inference network
-        self.z_mean, self.z_logstd = self._inf_model(self.x, network_weights['W'], network_weights['b'])
+        self.z_mean, self.z_logstd = self._inf_model(network_weights['W'], network_weights['b'])
 
         # sampling latent space from learned parameters
         self.z = self._sampling(self.z_mean, self.z_logstd)
 
         # reconstruct training data from sampled latent states
-        self.x_rec = self._gen_model(self.z, network_weights['W'], network_weights['b'])
+        self.x_rec = self._gen_model(network_weights['W'], network_weights['b'])
 
     # define VAE loss and optimizer
     def _model_loss_optimizer(self):
@@ -178,7 +177,7 @@ for i in range(5):
     plt.imshow(x_rec[i].reshape(28, 28), cmap="gray")
     plt.axis('off')
 plt.tight_layout()
-
+plt.show()
 
 # latent space visualization for latent_dim=2
 plt.figure(figsize=(8, 6))
@@ -190,6 +189,7 @@ for i in range(20):
                 cmap='Spectral',
                 edgecolors='black')
 plt.colorbar()
+plt.show()
 
 
 # sampling latent space with 15 * 15 examples
@@ -209,4 +209,6 @@ Xi, Yi = np.meshgrid(x_values, y_values)
 plt.imshow(canvas, origin="upper", cmap="gray")
 plt.axis('off')
 plt.tight_layout()
+plt.show()
+
 
