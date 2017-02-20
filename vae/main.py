@@ -136,7 +136,7 @@ latent_dim  = 2
 batch_size  = 1000
 input_shape = 784
 print_step  = 1
-total_epoch = 200
+total_epoch = 500
 network_architecture = dict(n_hidden_1 = 600,
                             n_hidden_2 = 600)
 
