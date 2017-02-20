@@ -91,6 +91,7 @@ class VAE(object):
                                          biases['decoder_2']))
         return fclayer_2
 
+    # use re-parametrization trick (p(z) ~ N(0, I))
     def _sampling(self, z_mean, z_logstd):
         epsilon = tf.random_normal((self.batch_size, self.latent_dim))
         return z_mean + tf.exp(z_logstd) * epsilon
