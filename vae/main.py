@@ -119,8 +119,14 @@ class VAE(object):
         # define kl loss KL(p(z|x)||q(z))
         self.kl_loss = -0.5 * tf.reduce_sum(1 + 2 * self.z_logstd - tf.square(self.z_mean) - tf.square(tf.exp(self.z_logstd)), axis=1)
 
+        # total loss = kl loss + rec loss
         self.loss = tf.reduce_mean(tf.add(self.rec_loss, self.kl_loss))
-        self.optimizer = tf.train.AdamOptimizer().minimize(self.loss)
+
+        # gradient clipping avoid nan
+        self.opt_func = tf.train.AdamOptimizer()
+        self.gvs = self.opt_func.compute_gradients(self.loss)
+        self.capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in self.gvs]
+        self.optimizer = self.opt_func.apply_gradients(self.capped_gvs)
 
     # train model on mini-batch
     def model_fit(self, x):
