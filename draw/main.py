@@ -6,6 +6,7 @@ Author: Liu, Shikun
 from tensorflow.examples.tutorials.mnist import input_data
 from tensorflow.contrib import rnn, layers
 
+import imageio
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -189,3 +190,40 @@ for epoch in range(total_epoch):
               .format((epoch+1), avg_cost[0], avg_cost[1], avg_cost[2]))
 
 
+# reconstruction visualization
+x_test= mnist.test.next_batch(batch_size)[0]
+x_rec = DRAW.sess.run(DRAW.x_rec, feed_dict={DRAW.x:x_test})
+
+plt.figure(figsize=(10, 4))
+for i in range(5):
+    plt.subplot(2, 5, i + 1)
+    plt.imshow(x_test[i].reshape(28, 28), cmap="gray")
+    plt.axis('off')
+    plt.subplot(2, 5, i +6)
+    plt.imshow(x_rec[i].reshape(28, 28), cmap="gray")
+    plt.axis('off')
+plt.tight_layout()
+plt.show()
+
+# plot each image
+def sigmoid (x):
+    return 1./(1 + np.exp(-x))
+
+c = DRAW.sess.run(DRAW.c, feed_dict={DRAW.x:x_test})
+
+#plt.figure(figsize=(14, 4))
+for i in range(sequence_len):
+    plt.imshow(sigmoid(c[i][0].reshape(28, 28)), cmap="gray")
+    plt.axis('off')
+    plt.savefig("images/c_0 {:02d}.png".format(i), bbox_inches='tight')
+
+    plt.imshow(sigmoid(c[i][1].reshape(28, 28)), cmap="gray")
+    plt.axis('off')
+    plt.savefig("images/c_1 {:02d}.png".format(i), bbox_inches='tight')
+
+
+images = []
+for i in range(sequence_len):
+    images.append(imageio.imread("images/c_1 {:02d}.png".format(i)))
+
+imageio.mimsave('movie2.gif', images)
