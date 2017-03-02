@@ -16,13 +16,15 @@ tf.flags.DEFINE_boolean("attention", True, "apply attention to model")
 class DRAW(object):
     def __init__(self, input_shape,
                  batch_size,
-                 filter_size,
+                 read_size,
+                 write_size,
                  latent_dim,
                  sequence_len,
                  network_architecture):
         # define model parameters
         self.input_shape  = input_shape
-        self.filter_size  = filter_size
+        self.read_size    = read_size
+        self.write_size   = write_size
         self.batch_size   = batch_size
         self.latent_dim   = latent_dim
         self.sequence_len = sequence_len
@@ -46,12 +48,12 @@ class DRAW(object):
     def _weights_init(self, n_hidden):
         self.RNN_enc = rnn.BasicLSTMCell(n_hidden, state_is_tuple=True)
         self.RNN_dec = rnn.BasicLSTMCell(n_hidden, state_is_tuple=True)
-        self.write_size = self.filter_size ** 2 if tf.flags.FLAGS.attention else self.input_shape
+        self.write_win = self.write_size ** 2 if tf.flags.FLAGS.attention else self.input_shape
 
         weights_all = dict()
         weights_all['W'] = {
             'write'     : tf.get_variable(name='write',
-                                          shape=[n_hidden, self.write_size],
+                                          shape=[n_hidden, self.write_win],
                                           initializer=layers.xavier_initializer()),
             'attention' : tf.get_variable(name='attention',
                                           shape=[n_hidden, 5],
@@ -64,7 +66,7 @@ class DRAW(object):
                                           initializer=layers.xavier_initializer())}
         weights_all['b'] = {
             'write'     : tf.Variable(name='write',
-                                      initial_value=tf.zeros(self.write_size)),
+                                      initial_value=tf.zeros(self.write_win)),
             'attention' : tf.Variable(name='attention',
                                       initial_value=tf.zeros(5)),
             'lat_mean'  : tf.Variable(name='lat_mean',
@@ -107,7 +109,7 @@ class DRAW(object):
    # create model reader
     def _model_read(self, x, x_rec, h_dec_prev, weights, biases):
         if tf.flags.FLAGS.attention:
-            Fx, Fy, gamma = self._attention('read', h_dec_prev, self.filter_size, weights, biases)
+            Fx, Fy, gamma = self._attention('read', h_dec_prev, self.read_size, weights, biases)
 
             # reshape images into A * B
             x     = tf.reshape(x, [-1, self.B, self.A])
@@ -115,10 +117,10 @@ class DRAW(object):
 
             # apply filter x = Fy*x*Fx^T, x_rec = Fy*x_rec*F_x^T
             x     = tf.einsum('aij,akj->aik', tf.einsum('aij,ajk->aik', Fy, x), Fx)
-            x     = gamma * tf.reshape(x, [-1, self.filter_size ** 2])
+            x     = gamma * tf.reshape(x, [-1, self.read_size ** 2])
 
             x_rec = tf.einsum('aij,akj->aik', tf.einsum('aij,ajk->aik', Fy, x_rec), Fx)
-            x_rec = gamma * tf.reshape(x_rec, [-1, self.filter_size ** 2])
+            x_rec = gamma * tf.reshape(x_rec, [-1, self.read_size ** 2])
         else:
             pass
         return tf.concat([x, x_rec], axis=1)
@@ -128,8 +130,8 @@ class DRAW(object):
         if tf.flags.FLAGS.attention:
             with tf.variable_scope("write", reuse=self.SHARE):
                 w_t = tf.add(tf.matmul(x, weights['write']),  biases['write'])
-            w_t = tf.reshape(w_t, [-1, self.filter_size, self.filter_size])
-            Fx, Fy, gamma = self._attention('write', x, self.filter_size, weights, biases)
+            w_t = tf.reshape(w_t, [-1, self.write_size, self.write_size])
+            Fx, Fy, gamma = self._attention('write', x, self.write_size, weights, biases)
             w_r = tf.einsum('aij,ajk->aik', tf.einsum('aji,ajk->aik', Fy, w_t), Fx)
             w_r = 1. / gamma * tf.reshape(w_r, [-1, self.input_shape])
             return w_r
@@ -225,9 +227,10 @@ latent_dim  = 20
 batch_size  = 100
 input_shape = 784
 print_step  = 1
-total_epoch = 5
+total_epoch = 10
 sequence_len = 64
-filter_size = 5
+read_size  = 2
+write_size = 5
 network_architecture = dict(n_hidden = 256)
 
 # load DRAW model
@@ -235,7 +238,8 @@ DRAW = DRAW(input_shape=input_shape,
             latent_dim=latent_dim,
             batch_size=batch_size,
             sequence_len=sequence_len,
-            filter_size=filter_size,
+            read_size=read_size,
+            write_size=write_size,
             network_architecture=network_architecture)
 
 # training DRAW model
@@ -255,7 +259,6 @@ for epoch in range(total_epoch):
         if epoch % print_step == 0:
             print("Epoch: {:04d} | kl-loss: {:.4f} + rec-loss: {:.4f} = total-loss: {:.4f}"
                   .format((epoch+1), cost[0], cost[1], cost[2]))
-
 
 
 # reconstruction visualization
@@ -296,4 +299,4 @@ images = []
 for i in range(sequence_len):
     images.append(imageio.imread("images/c_2_atten {:02d}.png".format(i)))
 
-imageio.mimsave('c_2_atten.gif', images)
+imageio.mimsave('animations/c_2_atten.gif', images)
