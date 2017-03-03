@@ -168,10 +168,10 @@ class DRAW(object):
         network_weights = self._weights_init(**self.network_architecture)
 
         # define zero state for parameters
-        self.c, self.z_mean, self.z_logstd = [[[0]] * self.sequence_len for _ in range(3)]
+        self.c, self.z_mean, self.z_logstd = [[[]] * self.sequence_len for _ in range(3)]
         self.enc_state = self.RNN_enc.zero_state(self.batch_size, tf.float32)
         self.dec_state = self.RNN_dec.zero_state(self.batch_size, tf.float32)
-        self.h_dec_prev = tf.zeros((self.batch_size, 256))
+        self.h_dec_prev = tf.zeros((self.batch_size, self.network_architecture['n_hidden']))
 
         # define model eq(3)-eq(8)
         for t in range(self.sequence_len):
@@ -207,9 +207,13 @@ class DRAW(object):
         self.loss = tf.reduce_mean(tf.add(self.rec_loss, self.kl_loss))
 
         # clip gradient avoid nan
+        def ClipIfNotNone(grad):
+            if grad is None:
+                return grad
+            return tf.clip_by_value(grad, -1, 1)
         self.opt_func = tf.train.AdamOptimizer()
         self.gvs = self.opt_func.compute_gradients(self.loss)
-        self.capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in self.gvs]
+        self.capped_gvs = [(ClipIfNotNone(grad), var) for grad, var in self.gvs]
         self.optimizer = self.opt_func.apply_gradients(self.capped_gvs)
 
     # train model on mini-batch
@@ -217,18 +221,16 @@ class DRAW(object):
         opt, cost = self.sess.run([self.optimizer, self.loss], feed_dict={self.x: x})
         return cost
 
-
-
 # load MNIST dataset
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
 # load network architecture, parameters
-latent_dim  = 20
+latent_dim  = 100
 batch_size  = 100
 input_shape = 784
 print_step  = 1
 total_epoch = 10
-sequence_len = 64
+sequence_len = 32
 read_size  = 2
 write_size = 5
 network_architecture = dict(n_hidden = 256)
@@ -249,7 +251,7 @@ for epoch in range(total_epoch):
     total_batch = int(mnist.train.num_examples / batch_size)
     # iterate for all batches
     for i in range(total_batch):
-        x_train, _ = mnist.train.next_batch(batch_size)
+        x_train = mnist.train.next_batch(batch_size)[0]
         # calculate and average kl and reconstruction loss for each batch
         cost[0] = np.mean(DRAW.sess.run(DRAW.kl_loss, feed_dict={DRAW.x: x_train}))
         cost[1] = np.mean(DRAW.sess.run(DRAW.rec_loss, feed_dict={DRAW.x: x_train}))
@@ -277,26 +279,21 @@ for i in range(5):
 plt.tight_layout()
 plt.show()
 
-# plot images for each t step and plot gif
+# plot images for each t step and make gif
 def sigmoid (x):
     return 1./(1 + np.exp(-x))
 
 c = DRAW.sess.run(DRAW.c, feed_dict={DRAW.x:x_test})
-for i in range(sequence_len):
-    plt.imshow(sigmoid(c[i][0].reshape(28, 28)), cmap="gray")
-    plt.axis('off')
-    plt.savefig("images/c_0_atten {:02d}.png".format(i), bbox_inches='tight')
+vis_num = 3
+for i in range(vis_num):
+    for j in range(sequence_len):
+        plt.imshow(sigmoid(c[j][i].reshape(28, 28)), cmap="gray")
+        plt.axis('off')
+        plt.savefig("images/c_{:01d}_atten-{:02d}.png".format(i, j), bbox_inches='tight')
 
-    plt.imshow(sigmoid(c[i][1].reshape(28, 28)), cmap="gray")
-    plt.axis('off')
-    plt.savefig("images/c_1_atten {:02d}.png".format(i), bbox_inches='tight')
+for i in range(vis_num):
+    images = []
+    for j in range(sequence_len):
+        images.append(imageio.imread("images/c_{:01d}_atten-{:02d}.png".format(i, j)))
+    imageio.mimsave('animations/c_{:01d}_atten.gif'.format(i), images)
 
-    plt.imshow(sigmoid(c[i][2].reshape(28, 28)), cmap="gray")
-    plt.axis('off')
-    plt.savefig("images/c_2_atten {:02d}.png".format(i), bbox_inches='tight')
-
-images = []
-for i in range(sequence_len):
-    images.append(imageio.imread("images/c_2_atten {:02d}.png".format(i)))
-
-imageio.mimsave('animations/c_2_atten.gif', images)
