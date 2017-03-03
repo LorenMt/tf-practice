@@ -123,6 +123,10 @@ class VAE(object):
         self.loss = tf.reduce_mean(tf.add(self.rec_loss, self.kl_loss))
 
         # gradient clipping avoid nan
+        def ClipIfNotNone(grad):
+            if grad is None:
+                return grad
+            return tf.clip_by_value(grad, -1, 1)
         self.opt_func = tf.train.AdamOptimizer()
         self.gvs = self.opt_func.compute_gradients(self.loss)
         self.capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in self.gvs]
@@ -139,7 +143,7 @@ mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
 # load network architecture, parameters
 latent_dim  = 2
-batch_size  = 1000
+batch_size  = 100
 input_shape = 784
 print_step  = 1
 total_epoch = 500
@@ -147,7 +151,7 @@ network_architecture = dict(n_hidden_1 = 600,
                             n_hidden_2 = 600)
 
 # load VAE model
-VAE = VAE(input_shape=784,
+VAE = VAE(input_shape=input_shape,
           latent_dim=latent_dim,
           batch_size=batch_size,
           network_architecture=network_architecture)
